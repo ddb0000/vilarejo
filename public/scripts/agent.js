@@ -29,6 +29,8 @@ export class Agent {
     };
     this.lastAction = "spawn";
     this.lastActionTimes = {};
+    this.decisionLog = [];
+    this.lastDecisionDebug = null;
     this.wants = {
       hangout: "cafe",
       workplace: "field",
@@ -40,6 +42,7 @@ export class Agent {
     const { now } = context;
     this.#driftNeeds();
     const plan = this.#plan(context);
+    this.#recordDecision(plan, now);
     const result = this.#act(plan, context);
     this.lastAction = plan.type;
     this.lastActionTimes[plan.type] = now;
@@ -96,12 +99,19 @@ export class Agent {
   }
 
   #scoreAction(type, baseRelevance, baseImportance, now, detail) {
-    const memoryHit = retrieveMemories(this.memory, type, 1, now)[0];
-    const relevance = clamp(baseRelevance + (memoryHit?.relevance ?? 0), 0, 2);
+    const memoryHits = retrieveMemories(this.memory, type, 3, now);
+    const memoryHit = memoryHits[0];
+    const relevance = clamp(baseRelevance + (memoryHit?.components.relevance ?? 0), 0, 2);
     const importance = clamp(baseImportance + (memoryHit?.entry.importance ?? 0) * 0.3, 0, 2);
     const recency = recencyScore(this.lastActionTimes[type], now, 5000);
     const score = relevance + recency + importance;
-    return { type, score, detail, breakdown: { relevance, recency, importance } };
+    return {
+      type,
+      score,
+      detail,
+      breakdown: { relevance, recency, importance },
+      memoryInsights: this.#formatMemoryInsights(memoryHits)
+    };
   }
 
   #act(plan, { world, agents, now }) {
@@ -180,6 +190,31 @@ export class Agent {
 
   #highestNeedValue() {
     return Math.max(this.needs.hunger, this.needs.rest, this.needs.social);
+  }
+
+  #recordDecision(plan, timestamp) {
+    const snapshot = {
+      timestamp,
+      action: plan.type,
+      breakdown: plan.breakdown,
+      memories: plan.memoryInsights ?? []
+    };
+    this.decisionLog.unshift(snapshot);
+    if (this.decisionLog.length > 6) {
+      this.decisionLog.pop();
+    }
+    this.lastDecisionDebug = snapshot;
+  }
+
+  #formatMemoryInsights(hits) {
+    return hits.map((hit) => ({
+      id: hit.entry.id,
+      text: hit.entry.observation,
+      relevance: hit.components.relevance,
+      recency: hit.components.recency,
+      importance: hit.components.importance,
+      total: hit.score
+    }));
   }
 
   #driftNeeds() {
