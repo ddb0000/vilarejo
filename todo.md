@@ -1,84 +1,241 @@
 # todo · vilarejo
 
-## m0 · prototype loop (done-core, cleanup left)
+## authoring tools
+- [ ] world editor: click-to-tag tiles (home/field/cafe/etc), save to world.json, load at boot
+- [ ] archetype editor: personality sliders, need decay multipliers, routine phases, import/export archetypes.json
+- [ ] quest graph editor: visual nodes/edges, autosave, export quests.json
 
-- [x] snapshot: world+agents -> json export (done 2025-11-15)
-- [x] live tuning panel (need drift sliders) (done 2025-11-15)
-- [x] structured events bus (action/needs/location) (done 2025-11-15)
-- [x] chore/work timer (drain only on field) (done 2025-11-15)
-- [x] devtools handle: window.vilarejo = {engine,world,agents,events} (done 2025-11-15)
-- [x] unmet-needs sparkline per agent (done 2025-11-15)
-- [x] readme: world layout + action map doc (done 2025-11-15)
+## simulation stability
+- [ ] memory corpse collector: decay old entries, purge stale quest logs, retain story-relevant nodes
+- [ ] world entropy control: periodic normalization, loop dampers, cascade stop rules
+- [ ] stress tests: 50/200 agent runs, 20k ticks, JS heap snapshots, automated harness
 
-## m1 · village behaviors
+## player thread
+- [ ] player verbs: bless/curse agent, influence rumor, trigger weather, spawn observation, tag location
+- [ ] diegetic storyboard: timeline scrubber, event filter, follow-camera, replay export
+- [ ] story browser: story cards listing quests/moods/rumors, jump-to-tick highlight
 
-### archetypes
-- [x] define archetypes: worker, farmer, wanderer, vendor (done 2025-11-15)
-- [x] per-archetype routine templates (morning/lunch/evening) (done 2025-11-15)
-- [x] archetype personality weights (importance multipliers) (done 2025-11-15)
-- [x] chore chains: multi-step routines (e.g., worker → field → cafe → home) (done 2025-11-15)
+## persistence contract
+- [ ] snapshot load (hot swap), diff UI with controls, timeline bookmarks
+- [ ] define snapshot format v1 + compatibility plan
+- [ ] seed persistence (save/load seeds per run)
 
-### scheduler
-- [x] global day scheduler: time-of-day ticks (done 2025-11-15)
-- [x] routine override windows (e.g., lunch hour) (done 2025-11-15)
-- [x] deterministic reseed at dawn for replay fidelity (done 2025-11-15)
+## map & biomes
+- [ ] multi-cell biomes (forest, river, market) + affinity weights
+- [ ] pathfinding weights + weather-biome interactions
+- [ ] festival days / village-wide events
 
-### observations
-- [x] market chatter injector (low-frequency) (done 2025-11-15)
-- [x] weather tick (sun/cloud/rain flag) (done 2025-11-15)
-- [x] “rumor” observation tags linked to places (done 2025-11-15)
-- [x] configurable runbooks: scripted mini-beats (done 2025-11-15)
+## LLM story mode v1
+- [ ] archetype prompt templates + mood → prose mapping
+- [ ] conversation pacing + multi-agent rules
+- [ ] deterministic fallback when bridge disabled
 
-### ai bridge stub
-- [x] add fetch gateway to z.ai/groq (byok, no secrets client-side) (done 2025-11-15)
-- [x] feature-flag: llm-intentions off-by-default (done 2025-11-15)
-- [x] bridge api: summarize 3–6 memories into 1 compressed memory (done 2025-11-15)
-- [x] bridge api: generate 1-sentence “mood” for agent card (done 2025-11-15)
+## authoring docs
+- [ ] architecture for authors guide
+- [ ] tutorials: add agent / write quest / design biome
+- [ ] LLM proxy safety + story debugging walkthrough
 
-## m2 · narrative arcs
+we’re basically at **endgame**.
+from a systems-hacker POV the whole project is already *post-feature*.
+the skeleton, flesh, and nerves are all in place.
 
-### quest chains
-- [x] define quest graph format (json). (done 2025-11-15)
-- [x] quest triggers from observations or needs thresholds. (done 2025-11-15)
-- [x] quest progress memory entries (compressed). (done 2025-11-15)
-- [x] quest resolution events → structured event bus. (done 2025-11-15)
+what’s missing is not *features* — it’s **the three things every sim eventually needs to not rot**:
 
-### shared memory prompts
-- [x] agent→agent rumor sharing (low bandwidth). (done 2025-11-15)
-- [x] compress shared memories via ai-bridge. (done 2025-11-15)
-- [x] add “importance inflation” for socially-shared memories. (done 2025-11-15)
+---
 
-### story tools
-- [x] screenshot/gif auto-capture every N ticks. (done 2025-11-15)
-- [x] cli: generate-seed, list-snapshots, diff-snapshots. (done 2025-11-15)
-- [x] regression harness: replay seed, assert deterministic events. (done 2025-11-15)
+# 1) **authoring tools**
 
-## m3 · playable slice
+right now? villagers, quests, routines, runbooks… all hardcoded or JSON-handcrafted.
 
-### ui polish
-- [x] onboarding overlay: brief controls + pinned walkthrough. (done 2025-11-15)
-- [x] agent cards: mood line, sparkline, routine phase badge. (done 2025-11-15)
-- [x] mini-map tile layer (optional). (done 2025-11-15)
-- [x] inspector: story mode toggle. (done 2025-11-15)
+you need a *world authoring interface* so the sim can grow without editing code every time.
 
-### chat-driven inspector (optional)
-- [x] chat panel for editing prompts (developer-only). (done 2025-11-15)
-- [x] introspect agent: dump memories, last 20 events. (done 2025-11-15)
-- [x] inject observation via chat command. (done 2025-11-15)
+missing pieces:
 
-## long-tail polish
+### world editor
 
-- [x] performance pass (agent count scaling). (done 2025-11-15)
-- [x] memory buffer eviction policies (smart compression). (done 2025-11-15)
-- [x] spatial indexing for neighbor queries. (done 2025-11-15)
-- [x] sprite layer (optional ascii or low-res glyphs). (done 2025-11-15)
-- [x] full readme rewrite with diagrams (ascii). (done 2025-11-15)
-- [x] “season 2” api surface doc. (done 2025-11-15)
+* click to mark tiles as home/field/cafe/market/etc
+* save to `world.json`
+* load at boot
+* obvious cheat: a little sidebar grid editor + color chips
 
-## deploy (later)
+### archetype editor
 
-### hosting
-- [ ] cloudflare pages deploy (free tier)
-- [ ] pages functions: llm proxy (byok env)
-- [ ] demo seed: static, replayable
-- [ ] public toggle: safe mode on
+* sliders: personality weights, need decay multipliers, routine phases
+* export/import to `archetypes.json`
+
+### quest graph editor (visual)
+
+* nodes (quest steps)
+* edges (conditions)
+* autosave
+* export to `quests.json`
+
+this is the diff between a simulation and a **toy engine**.
+
+---
+
+# 2) **simulation stability & anti-entropy**
+
+vilarejo is already complex. long runs (10k+ ticks) will expose drift.
+
+missing pieces:
+
+### memory corpse-collector
+
+you already do compression, but you need:
+
+* decay old memories beyond compression
+* purge stale quest_step logs
+* revive only story-relevant nodes
+* long-run anti-noise decay
+
+### world entropy control
+
+weather+routines+rng can create loops or dead villages.
+needs:
+
+* periodic normalization (e.g., needs drift reset windows)
+* emergent behavior dampers
+* runaway-cascade stops (like “all villagers decide to stay at cafe forever”)
+
+### stress tests
+
+* 50 agents
+* 200 agents (sprite mode off)
+* 20k ticks
+* mem profiler (js heap snapshots)
+
+codex can run these manually but you need the **harness**.
+
+---
+
+# 3) **the “player thread”**
+
+the slice is “playable”, yes — but no *player role* exists.
+
+right now you observe, but cannot intervene **in a first-class way**.
+
+missing pieces:
+
+### player verbs
+
+* bless agent (boost need or mood +1)
+* curse agent (need penalty)
+* influence rumor strength
+* trigger weather
+* spawn an observation
+* tag a location with “festival”, “fire”, “market day”
+
+### diegetic ui
+
+like old sim games:
+
+* timeline scrubber
+* event filter
+* “follow agent” camera lock
+* replay export
+
+### story browser
+
+you already have events + auto-captures.
+now build:
+
+* left panel = story cards (quests, moods, rumors)
+* click = zoom to tick + highlight agent
+
+this is the **presentation layer**, and the only thing holding it back from “this is a full emergent-story sandbox”.
+
+---
+
+# 4) **save/load + persistence contract**
+
+snapshot exists. regression exists.
+
+but:
+
+### missing
+
+* **load snapshot** into running sim
+* **snapshot diff** with playable controls
+* **timeline bookmarks**
+* **persistence format v1.0** (to freeze forever)
+
+the moment you define the format as stable, you can build tooling around it.
+
+right now it’s malleable.
+
+---
+
+# 5) **map expansion / biomes (optional but killer)**
+
+current grid = tiny.
+
+the world dies without *neighborhood identity*.
+
+missing:
+
+* multi-cell biomes (forest, river, market)
+* pathfinding weighting
+* agent “affinity” (farmer loves field, wanderer loves forest, etc.)
+* weather affecting biomes (rain boosts field, lowers cafe turnout)
+* festival days / village-wide events (fire night, harvest)
+
+biomes turn your sim from “petri dish” to “place”.
+
+---
+
+# 6) **LLM story mode v1 (controlled)**
+
+code is ready. bridge exists. feature flag exists.
+
+what’s missing is the *design*:
+
+### you need:
+
+* prompt templates per archetype
+* mood → prose mapping
+* multi-agent conversation rules
+* pacing regulator (so LLM doesn’t spam)
+* deterministic fallback when LLM is disabled
+
+codex can generate those templates automatically every time you run the proxy, but they need to be **persistent artifacts**.
+
+---
+
+# 7) **documentation for humans**
+
+README is good, diagrams exist, but missing:
+
+* “architecture for authors” guide
+* “adding new agents” tutorial
+* “writing a quest” short doc
+* “designing a biome”
+* “using the LLM proxy safely”
+* “story debugging 101” (how to read event logs)
+
+without these, nobody but you can extend vilarejo.
+
+# TL;DR
+
+vilarejo is **feature-complete**.
+what’s left is **the meta-layer**:
+
+### the toolchain
+
+(world editor, quest editor, biome editor)
+
+### the stability layer
+
+(memory decay, drift control, stress tests)
+
+### the player layer
+
+(intervention verbs, replay tools, story browser)
+
+### the persistence contract
+
+(snapshot load, bookmarks, versioned world format)
+
+### the authoring docs
+
+(how to build new content without touching code)
