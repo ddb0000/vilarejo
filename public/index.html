@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vilarejo Prototype</title>
+    <style>
+      :root {
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #101318;
+        color: #e6edf7;
+      }
+      body {
+        margin: 0;
+        padding: 1rem;
+      }
+      #app {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      canvas {
+        border: 1px solid #30363d;
+        background: #0b0f14;
+      }
+      aside {
+        width: 280px;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 0.75rem;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.5rem;
+      }
+      h2 {
+        font-size: 1rem;
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #8ab4ff;
+      }
+      .agents {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .agent-card {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.5rem;
+        background: #0d1117;
+      }
+      .needs {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        margin-top: 0.25rem;
+      }
+      .need-bar {
+        height: 6px;
+        border-radius: 4px;
+        background: #222832;
+        overflow: hidden;
+      }
+      .need-bar span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #ffb347, #ffcc33);
+      }
+      .log {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.5rem;
+        background: #0b0f14;
+        height: 260px;
+        overflow-y: auto;
+        font-size: 0.85rem;
+      }
+      .log-entry {
+        margin-bottom: 0.35rem;
+      }
+      .inspector {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.5rem;
+        background: #0b0f14;
+        font-size: 0.85rem;
+        min-height: 150px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .inspector-header {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 600;
+      }
+      .inspector-breakdown {
+        font-size: 0.8rem;
+        color: #9fbce7;
+      }
+      .memory-item {
+        border: 1px solid #1f2630;
+        border-radius: 4px;
+        padding: 0.35rem;
+      }
+      .memory-metrics {
+        font-size: 0.75rem;
+        color: #8ab4ff;
+        margin-top: 0.15rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+      .inspector-empty {
+        color: #627597;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div>
+        <h1>Vilarejo · Prototype Loop</h1>
+        <canvas id="world-canvas" width="320" height="320"></canvas>
+      </div>
+      <aside>
+        <h2>Agents</h2>
+        <div id="agents" class="agents"></div>
+        <h2>Log</h2>
+        <div id="log" class="log"></div>
+        <h2>Inspector</h2>
+        <div id="inspector" class="inspector">
+          <div class="inspector-empty">Hover an agent to inspect their last plan.</div>
+        </div>
+      </aside>
+    </div>
+    <script type="module" src="scripts/engine.js"></script>
+  </body>
+</html>
