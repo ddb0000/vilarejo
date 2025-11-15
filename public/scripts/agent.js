@@ -2,9 +2,9 @@ import { clamp, recencyScore } from "./util.js";
 import { add as addMemoryEntry, retrieve as retrieveMemories, createMemory } from "./memory.js";
 
 const NEED_DRIFT = {
-  hunger: 0.015,
-  rest: 0.012,
-  social: 0.013
+  hunger: 0.01,
+  rest: 0.008,
+  social: 0.009
 };
 
 const ACTION_IMPORTANCE = {
@@ -14,6 +14,18 @@ const ACTION_IMPORTANCE = {
   rest: 0.6,
   work: 0.35
 };
+
+const ROUTINE_PHASES = ["wake", "work", "socialize", "rest"];
+const ROUTINE_DURATIONS = {
+  wake: 20000,
+  work: 120000,
+  socialize: 60000,
+  rest: 120000
+};
+const URGENT_THRESHOLDS = { hunger: 0.8, rest: 0.2, social: 0.4 };
+const SOCIAL_RADIUS = 1;
+const ROUTINE_BONUS = 0.1;
+const LOG_THROTTLE_MS = 2000;
 
 export class Agent {
   constructor({ id, name, start, role = "villager", memory }) {
@@ -29,8 +41,12 @@ export class Agent {
     };
     this.lastAction = "spawn";
     this.lastActionTimes = {};
+    this.lastLogActionTimes = {};
     this.decisionLog = [];
     this.lastDecisionDebug = null;
+    this.routinePhase = "wake";
+    this.routineTimer = ROUTINE_DURATIONS.wake;
+    this.lastRoutineUpdate = 0;
     this.wants = {
       hangout: "cafe",
       workplace: "field",
@@ -50,9 +66,9 @@ export class Agent {
   }
 
   #plan({ world, agents, now }) {
+    this.#advanceRoutine(now);
     const currentCell = world.getCell(this.pos.x, this.pos.y);
     const others = agents.filter((agent) => agent.id !== this.id);
-
     const options = [
       this.#evaluateMove(world, currentCell, now),
       this.#evaluateTalk(currentCell, others, now),
@@ -60,9 +76,26 @@ export class Agent {
       this.#evaluateRest(currentCell, now),
       this.#evaluateWork(currentCell, now)
     ].filter(Boolean);
-
+    if (!options.length) {
+      return {
+        type: "rest",
+        score: 0,
+        detail: {},
+        breakdown: { relevance: 0, recency: 0, importance: 0 },
+        memoryInsights: [],
+        cause: "routine"
+      };
+    }
     options.sort((a, b) => b.score - a.score);
-    return options[0];
+    const directive = this.#directivePlan(options, { world, agents, now });
+    if (directive) return directive;
+    const routineHint = this.#routineAction(world, agents);
+    const routinePlan = this.#planForAction(options, routineHint.action, routineHint.detail, "routine");
+    if (routinePlan) {
+      routinePlan.score += ROUTINE_BONUS;
+      return routinePlan;
+    }
+    return { ...options[0], cause: "routine" };
   }
 
   #evaluateMove(world, currentCell, now) {
@@ -76,10 +109,12 @@ export class Agent {
   }
 
   #evaluateTalk(currentCell, others, now) {
-    const atSameCell = others.find((agent) => agent.pos.x === this.pos.x && agent.pos.y === this.pos.y);
-    const baseRelevance = atSameCell ? 0.5 + this.needs.social : this.needs.social * 0.2;
+    if (this.needs.social >= 0.6) return null;
+    const nearby = this.#closeAgent(others);
+    if (!nearby) return null;
+    const baseRelevance = 0.5 + (0.6 - this.needs.social);
     return this.#scoreAction("talk", baseRelevance, ACTION_IMPORTANCE.talk, now, {
-      partner: atSameCell?.name || null
+      partner: nearby.name
     });
   }
 
@@ -136,12 +171,18 @@ export class Agent {
     }
 
     if (logMessage) {
-      this.memory = addMemoryEntry(
-        this.memory,
-        `${this.name} ${logMessage}`,
-        plan.breakdown.importance * 0.5,
-        now
-      );
+      const lastLog = this.lastLogActionTimes[plan.type] || 0;
+      if (now - lastLog >= LOG_THROTTLE_MS) {
+        this.lastLogActionTimes[plan.type] = now;
+        this.memory = addMemoryEntry(
+          this.memory,
+          `${this.name} ${logMessage}`,
+          plan.breakdown.importance * 0.5,
+          now
+        );
+      } else {
+        logMessage = "";
+      }
     }
 
     return { action: plan.type, logMessage };
@@ -165,13 +206,15 @@ export class Agent {
   }
 
   #eat() {
-    this.needs.hunger = clamp(this.needs.hunger - 0.45);
-    this.needs.social = clamp(this.needs.social - 0.05);
+    this.needs.hunger = clamp(this.needs.hunger - 0.65);
+    this.needs.social = clamp(this.needs.social - 0.03);
+    this.needs.rest = clamp(this.needs.rest - 0.02);
     return "eats fresh stew at the cafe";
   }
 
   #rest() {
-    this.needs.rest = clamp(this.needs.rest - 0.5);
+    this.needs.rest = clamp(this.needs.rest - 0.65);
+    this.needs.hunger = clamp(this.needs.hunger + 0.01);
     return "takes a short rest at home";
   }
 
@@ -192,12 +235,113 @@ export class Agent {
     return Math.max(this.needs.hunger, this.needs.rest, this.needs.social);
   }
 
+  #directivePlan(options, context) {
+    const urgent = this.#urgentAction(context);
+    if (urgent) return this.#planForAction(options, urgent.action, urgent.detail, "urgent");
+    const memory = this.#memoryAction(context.now);
+    if (memory) return this.#planForAction(options, memory.action, memory.detail, "memory");
+    return null;
+  }
+
+  #planForAction(options, action, detail, cause) {
+    if (!action) return null;
+    const match = options.find((option) => option.type === action);
+    if (!match) return null;
+    return {
+      ...match,
+      cause,
+      detail: detail ? { ...(match.detail || {}), ...detail } : match.detail
+    };
+  }
+
+  #advanceRoutine(now) {
+    if (!this.lastRoutineUpdate) {
+      this.lastRoutineUpdate = now;
+      return;
+    }
+    this.routineTimer -= now - this.lastRoutineUpdate;
+    this.lastRoutineUpdate = now;
+    if (this.routineTimer <= 0) {
+      const idx = (ROUTINE_PHASES.indexOf(this.routinePhase) + 1) % ROUTINE_PHASES.length;
+      this.routinePhase = ROUTINE_PHASES[idx];
+      this.routineTimer = ROUTINE_DURATIONS[this.routinePhase];
+    }
+  }
+
+  #routineAction(world, agents) {
+    const cell = world.getCell(this.pos.x, this.pos.y);
+    const home = world.closestCell(this.wants.home, this.pos);
+    const field = world.closestCell(this.wants.workplace, this.pos);
+    const cafe = world.closestCell(this.wants.hangout, this.pos);
+    const neighbor = this.#closeAgent(agents);
+    switch (this.routinePhase) {
+      case "wake":
+        return cell?.tag === "home" ? { action: "rest" } : { action: "move", detail: { desiredTag: "home", target: home } };
+      case "work":
+        return cell?.tag === "field" ? { action: "work" } : { action: "move", detail: { desiredTag: "field", target: field } };
+      case "socialize":
+        if (neighbor) return { action: "talk", detail: { partner: neighbor.name } };
+        return { action: "move", detail: { desiredTag: "cafe", target: cafe } };
+      case "rest":
+      default:
+        return cell?.tag === "home" ? { action: "rest" } : { action: "move", detail: { desiredTag: "home", target: home } };
+    }
+  }
+
+  #urgentAction({ world, agents }) {
+    if (this.needs.hunger >= URGENT_THRESHOLDS.hunger && this.#nearTag(world, "cafe")) {
+      return { action: "eat" };
+    }
+    if (this.needs.rest <= URGENT_THRESHOLDS.rest && this.#nearTag(world, "home")) {
+      return { action: "rest" };
+    }
+    if (this.needs.social <= URGENT_THRESHOLDS.social) {
+      const neighbor = this.#closeAgent(agents);
+      if (neighbor) return { action: "talk", detail: { partner: neighbor.name } };
+    }
+    return null;
+  }
+
+  #memoryAction(now) {
+    const habit = retrieveMemories(this.memory, "habit", 3, now)[0];
+    const named = retrieveMemories(this.memory, this.name, 3, now)[0];
+    const best = [habit, named].filter(Boolean).sort((a, b) => b.score - a.score)[0];
+    if (!best || best.score < 0.8) return null;
+    const action = this.#actionFromMemory(best.entry.observation);
+    if (!action) return null;
+    return { action };
+  }
+
+  #actionFromMemory(text) {
+    const lowered = (text || "").toLowerCase();
+    if (lowered.includes("cafe")) return "eat";
+    if (lowered.includes("field")) return "work";
+    if (lowered.includes("home")) return "rest";
+    if (lowered.includes("talk")) return "talk";
+    return null;
+  }
+
+  #nearTag(world, tag) {
+    const cell = world.closestCell(tag, this.pos);
+    if (!cell) return false;
+    return this.#distance(cell, this.pos) <= 1;
+  }
+
+  #closeAgent(agents) {
+    return agents.find((agent) => agent.id !== this.id && this.#distance(agent.pos, this.pos) <= SOCIAL_RADIUS);
+  }
+
+  #distance(a, b) {
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  }
+
   #recordDecision(plan, timestamp) {
     const snapshot = {
       timestamp,
       action: plan.type,
       breakdown: plan.breakdown,
-      memories: plan.memoryInsights ?? []
+      memories: plan.memoryInsights ?? [],
+      cause: plan.cause || "routine"
     };
     this.decisionLog.unshift(snapshot);
     if (this.decisionLog.length > 6) {

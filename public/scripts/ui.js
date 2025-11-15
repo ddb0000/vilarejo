@@ -36,6 +36,7 @@ export class UI {
       card.innerHTML = `
         <strong>${agent.name}</strong>
         <div class="meta">${agent.role} · last: ${agent.lastAction}</div>
+        <div class="meta">routine: ${agent.routinePhase} · ${Math.ceil((agent.routineTimer || 0) / 1000)}s</div>
       `;
       const needs = document.createElement("div");
       needs.className = "needs";
@@ -77,6 +78,7 @@ export class UI {
     const fmt = (value) => (value ?? 0).toFixed(2);
     const plan = decision.breakdown ?? { relevance: 0, recency: 0, importance: 0 };
     const planTotal = plan.relevance + plan.recency + plan.importance;
+    const cause = decision.cause || "routine";
     const memories = (decision.memories || [])
       .map(
         (mem, idx) => `
@@ -98,7 +100,7 @@ export class UI {
         <span>${decision.action}</span>
       </div>
       <div class=\"inspector-breakdown\">
-        plan · rel ${fmt(plan.relevance)} · rec ${fmt(plan.recency)} · imp ${fmt(plan.importance)} · total ${fmt(planTotal)}
+        cause ${cause} · rel ${fmt(plan.relevance)} · rec ${fmt(plan.recency)} · imp ${fmt(plan.importance)} · total ${fmt(planTotal)}
       </div>
       <div>${memories || '<div class=\"inspector-empty\">No relevant memories.</div>'}</div>
     `;

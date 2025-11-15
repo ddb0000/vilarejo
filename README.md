@@ -2,7 +2,9 @@
 like a stardew valley smallville thing
 
 
-## inspired on
+## inspired by
+https://arxiv.org/pdf/2304.03442
+
 https://github.com/nmatter1/smallville
 
 https://nmatter1.github.io/smallville/docs
