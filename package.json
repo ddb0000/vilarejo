@@ -2,9 +2,14 @@
   "name": "vilarejo",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "wrangler pages dev public --ip=0.0.0.0 --port=8787",
     "build": "true",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "generate-seed": "node scripts/generate-seed.mjs",
+    "list-snapshots": "node scripts/list-snapshots.mjs",
+    "diff-snapshots": "node scripts/diff-snapshots.mjs",
+    "regression": "node scripts/regression.mjs"
   }
 }

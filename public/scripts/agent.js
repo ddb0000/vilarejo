@@ -1,11 +1,13 @@
 import { clamp, recencyScore } from "./util.js";
 import { add as addMemoryEntry, retrieve as retrieveMemories, createMemory } from "./memory.js";
+import { resolveArchetype } from "./archetypes.js";
 
-const NEED_DRIFT = {
+const DEFAULT_NEED_DRIFT = {
   hunger: 0.01,
   rest: 0.008,
   social: 0.009
 };
+let NEED_DRIFT = { ...DEFAULT_NEED_DRIFT };
 
 const ACTION_IMPORTANCE = {
   move: 0.3,
@@ -29,7 +31,7 @@ const LOG_THROTTLE_MS = 2000;
 const TARGET_TTL = 2000;
 
 export class Agent {
-  constructor({ id, name, start, role = "villager", memory }) {
+  constructor({ id, name, start, role = "villager", memory, archetype = "worker" }) {
     this.id = id;
     this.name = name;
     this.role = role;
@@ -49,18 +51,30 @@ export class Agent {
     this.routineTimer = ROUTINE_DURATIONS.wake;
     this.lastRoutineUpdate = 0;
     this.activeTarget = null;
+    this.metricsHistory = [];
+    this.maxMetricsPoints = 30;
+    this.choreQueue = [];
+    this.lastSlotId = null;
     this.wants = {
       hangout: "cafe",
       workplace: "field",
       home: "home"
     };
+    this.archetypeId = archetype;
+    this.archetype = resolveArchetype(archetype);
+    this.personality = this.archetype.personality || {};
   }
 
   tick(context) {
-    const { now, emitEvent } = context;
+    const { now, emitEvent, daySlotId } = context;
     this.#driftNeeds();
+    this.#recordUnmet();
     this.#pruneTarget(now);
     this.#emitEvent(emitEvent, now, "need", { needs: { ...this.needs } });
+    if (daySlotId && daySlotId !== this.lastSlotId) {
+      this.#handleSlotChange(daySlotId);
+      this.lastSlotId = daySlotId;
+    }
     let plan = this.#plan(context);
     plan = { ...plan, cause: plan.cause || "routine" };
     this.#maybeSetTarget(plan, now);
@@ -72,10 +86,11 @@ export class Agent {
     return result;
   }
 
-  #plan({ world, agents, now }) {
+  #plan({ world, agents, now, daySlotId, neighbors }) {
     this.#advanceRoutine(now);
     const currentCell = world.getCell(this.pos.x, this.pos.y);
-    const others = agents.filter((agent) => agent.id !== this.id);
+    const neighborList = neighbors ? neighbors(this, 1) : [];
+    const others = neighborList.length ? neighborList : agents.filter((agent) => agent.id !== this.id);
     const options = [
       this.#evaluateMove(world, currentCell, now),
       this.#evaluateTalk(currentCell, others, now),
@@ -96,7 +111,7 @@ export class Agent {
     options.sort((a, b) => b.score - a.score);
     const directive = this.#directivePlan(options, { world, agents, now });
     if (directive) return directive;
-    const routineHint = this.#routineAction(world, agents);
+    const routineHint = this.#routineAction(world, agents, daySlotId);
     const routinePlan = this.#planForAction(options, routineHint.action, routineHint.detail, "routine");
     if (routinePlan) {
       routinePlan.score += ROUTINE_BONUS;
@@ -146,7 +161,8 @@ export class Agent {
     const relevance = clamp(baseRelevance + (memoryHit?.components.relevance ?? 0), 0, 2);
     const importance = clamp(baseImportance + (memoryHit?.entry.importance ?? 0) * 0.3, 0, 2);
     const recency = recencyScore(this.lastActionTimes[type], now, 5000);
-    const score = relevance + recency + importance;
+    const personalityBoost = this.personality?.[type] ?? 1;
+    const score = (relevance + recency + importance) * personalityBoost;
     return {
       type,
       score,
@@ -173,7 +189,7 @@ export class Agent {
         break;
       case "work":
       default:
-        logMessage = this.#work();
+        logMessage = this.#work(world);
         break;
     }
 
@@ -217,6 +233,9 @@ export class Agent {
     if (this.activeTarget && this.activeTarget.x === nextPos.x && this.activeTarget.y === nextPos.y) {
       this.activeTarget = null;
     }
+    if (this.choreQueue.length && detail?.desiredTag === this.choreQueue[0] && nextPos.x === target.x && nextPos.y === target.y) {
+      this.choreQueue.shift();
+    }
     return `walks from (${before.x},${before.y}) toward ${desiredTag}`;
   }
 
@@ -243,10 +262,14 @@ export class Agent {
     return "takes a short rest at home";
   }
 
-  #work() {
-    this.needs.hunger = clamp(this.needs.hunger + 0.05, 0, 1);
-    this.needs.rest = clamp(this.needs.rest + 0.03, 0, 1);
-    return "tends to the field rows";
+  #work(world) {
+    const cell = world.getCell(this.pos.x, this.pos.y);
+    if (cell?.tag === "field") {
+      this.needs.hunger = clamp(this.needs.hunger + 0.05, 0, 1);
+      this.needs.rest = clamp(this.needs.rest + 0.03, 0, 1);
+      return "tends to the field rows";
+    }
+    return "preps tools while heading to the field";
   }
 
   #desiredTag() {
@@ -293,12 +316,23 @@ export class Agent {
     }
   }
 
-  #routineAction(world, agents) {
+  #routineAction(world, agents, slotId = "morning") {
     const cell = world.getCell(this.pos.x, this.pos.y);
     const home = world.closestCell(this.wants.home, this.pos);
     const field = world.closestCell(this.wants.workplace, this.pos);
     const cafe = world.closestCell(this.wants.hangout, this.pos);
     const neighbor = this.#closeAgent(agents);
+    if (this.choreQueue.length) {
+      const tag = this.choreQueue[0];
+      const target = world.closestCell(tag, this.pos) || this.pos;
+      return { action: "move", detail: { desiredTag: tag, target } };
+    }
+    const archetypeRoutine = this.archetype?.routines?.[slotId];
+    if (archetypeRoutine) {
+      const phase = archetypeRoutine.phase || "move";
+      const targetCell = world.closestCell(archetypeRoutine.targetTag, this.pos) || this.pos;
+      return { action: phase === "socialize" ? "talk" : phase === "rest" ? "rest" : phase === "work" ? "work" : "move", detail: { desiredTag: archetypeRoutine.targetTag, target: targetCell } };
+    }
     switch (this.routinePhase) {
       case "wake":
         return cell?.tag === "home" ? { action: "rest" } : { action: "move", detail: { desiredTag: "home", target: home } };
@@ -391,6 +425,14 @@ export class Agent {
     emitEvent({ ts, agentId: this.id, type, data });
   }
 
+  #recordUnmet() {
+    const unmet = this.#highestNeedValue();
+    this.metricsHistory.unshift(unmet);
+    if (this.metricsHistory.length > this.maxMetricsPoints) {
+      this.metricsHistory.pop();
+    }
+  }
+
   #maybeSetTarget(plan, ts) {
     const detail = plan?.detail;
     if (!detail?.target) return;
@@ -409,9 +451,29 @@ export class Agent {
     }
   }
 
+  #handleSlotChange(slotId) {
+    const chain = this.archetype?.choreChains?.[slotId];
+    if (chain) {
+      this.choreQueue = [...chain];
+    }
+  }
+
   #driftNeeds() {
     for (const key of Object.keys(this.needs)) {
       this.needs[key] = clamp(this.needs[key] + NEED_DRIFT[key]);
     }
   }
+}
+
+export function setNeedDrift(updates = {}) {
+  NEED_DRIFT = {
+    ...NEED_DRIFT,
+    ...Object.fromEntries(
+      Object.entries(updates).map(([key, value]) => [key, Number(value)])
+    )
+  };
+}
+
+export function getNeedDrift() {
+  return { ...NEED_DRIFT };
 }

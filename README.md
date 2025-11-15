@@ -1,53 +1,68 @@
-# VILAREJO
-Smallville-inspired sandbox where a handful of deterministic villagers walk a 4×4 grid, maintain RRI-scored memories, and follow routine fallbacks unless observations nudge them off script.
+# VILAREJO · Agents With Routines, Quests, And Story Tools
 
-![prototype screenshot placeholder](public/screenshot.png)
+```
+┌──────── WORLD GRID (4×4) ────────┐
+│ home | field | field | cafe      │
+│ home | field | field | cafe      │
+│ field| field | field | cafe      │
+│ home | field | field | cafe      │
+└──────────────────────────────────┘
+```
 
-## World Layout
-| y\x | 0   | 1     | 2     | 3    |
-| --- | --- | ----- | ----- | ---- |
-| 0   | home| field | field | cafe |
-| 1   | home| field | field | cafe |
-| 2   | field| field| field| cafe |
-| 3   | home| field | field | cafe |
+Each villager is an archetype (worker / farmer / wanderer / vendor) with a daily template (`dawn → morning → lunch → evening → night`), chore chains (e.g., worker: `field → cafe → home`), and personality weights that bias the RRI planner:
 
-- Each cell exposes a `tag` so actions can query “closest cafe/home/field”.
-- Agents move in Manhattan steps; the canvas renders their positions plus a glowing outline + tether for any active target cell.
+```
+score = (0.4*relevance + 0.3*recency + 0.3*importance) * personality[action]
+relevance   → token overlap vs. query
+recency     → exp(-Δt / 300000)
+importance  → manual weight (urgency, quest step, rumor share)
+```
 
-## Agent Loop
-### Needs & Actions
-- Needs drift every tick (`hunger`, `rest`, `social`). Eat/rest replenish big chunks so those actions rarely fire back-to-back.
-- Planner scores the five actions (`move`, `talk`, `eat`, `rest`, `work`) via the **RRI** formula: `score = 0.4*relevance + 0.3*recency + 0.3*importance`, where relevance is token-overlap vs the query, recency is `exp(-Δt/300000)`, and importance is a manual weight.
-- Each decision logs a structured `decide` event plus a friendly string in the sidebar log; `move` events highlight the destination cell.
+## How To Drive
+- **Global Controls**: `space` pause/resume · `.` single-step · `j/k` cycle pinned agent. Pause panel mirrors the buttons above the canvas.
+- **Need Drift Panel**: drag hunger/rest/social sliders to retune the loop live (applies to every agent).
+- **Snapshots**: `Snapshot` button or `window.vilarejo.snapshot()` saves `{ time, world, agents[] }` JSON; stash them under `./snapshots` for `npm run diff-snapshots`.
+- **Minimap + Sprites**: lower canvas renders a miniature grid. Set `window.__SPRITES = true` for ASCII glyphs over the main board.
+- **Inspector**: default shows planner RRI breakdown; click **Story Mode** to switch to quest/rumor view.
+- **Dev Chat**: use `/agent Ana`, `/inject Bruno lunchtime stew`, or plain text to annotate the pinned villager. Commands bubble through the structured event bus.
+- **Auto Capture**: every ~50 ticks the canvas is pushed to `window.__CAPTURES[]` and logged as a `capture` event for future GIF stitching.
+- **Onboarding Overlay**: lists the quick controls; dismiss via the button or `window.__OVERLAY=false`.
 
-### Routine fallback
-- Every agent cycles `wake → work → socialize → rest` with timers (`20s / 120s / 60s / 120s`).
-- Routine picks targets (home, field, cafe) and adds a bias (+0.1) to whichever planner action matches the current phase.
-- Deviations override routine when (a) an urgent need fires (hungry at cafe, tired at home, lonely with neighbor) or (b) the top memory score ≥ 0.8 (habit text suggests eat/work/rest/talk).
+## Routine + Quest Layer
+- Routine fallback still cycles wake/work/socialize/rest but now respects day slots from the scheduler. Chore queues trigger multi-step moves unless urgent needs or high-scoring memories override.
+- Quest graphs live in `public/scripts/quests.js`. Triggers fire on needs, location, or observation keywords. Each step logs a compressed memory and emits `quest` events; completion clears the agent’s queue.
+- Shared-memory prompts kick off every ~80s: a source agent summarizes recent history (LLM bridge when enabled) and hands a high-importance rumor to a neighbor.
+- Injectors run in the background: market chatter, weather ticks (`sunny/cloudy/rainy`), rumor beats, and the classic `window.__DEV_OBS` fire drill.
 
-### Memory stream & Injector
-- Memories live in a 32-slot ring buffer per agent. `window.__DEV_OBS = true` toggles a scripted injector that drops “field fire drill” memories into random agents near a field (~15 s cadence, ≤1/min/agent) and emits `inject` events.
+## AI Bridge (Feature-Flagged)
+- Set `window.__LLM_INTENTIONS = true` and `window.__LLM_PROXY_URL = "https://your-gateway"` to forward summarization/mood requests to your BYOK proxy (Z.AI / Groq supported). Default is **off**.
+- `summarizeMemories(agent, payload)` compresses quest progress, rumor shares, and dawn reflections; `generateMood(agent)` feeds the agent cards.
 
-## Controls & Debug
-- **Pause/Step** buttons freeze the 5 Hz loop or advance exactly one frame; keyboard mirrors this: `space` toggles, `.` single-steps, `j/k` cycle the pinned agent card.
-- **Seed** input + `rngSeed` guarantee identical first 200 ticks for equal seeds; snapshots (`Snapshot` button or `window.vilarejo.snapshot()`) dump `{ time, world, agents[] }` JSON so you can diff or reload a state manually.
-- **Events** panel streams the last 20 structured events (`need`, `decide`, `act`, `move`, `inject`).
-- **DevTools handle**: `window.vilarejo` exposes `{ engine, world, agents, events, snapshot }` for quick poking.
+## Tooling & Scripts
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Wrangler Pages dev server (`http://localhost:8787`). |
+| `npm run smoke [--ticks=20]` | DOM-shimmed sanity test (default 10 ticks). |
+| `npm run regression` | Deterministic replay harness (200 ticks). |
+| `npm run generate-seed` | Emits a random hex seed. |
+| `npm run list-snapshots` | Lists JSON exports under `./snapshots`. |
+| `npm run diff-snapshots -- a.json b.json` | Highlights position/needs drift between two states. |
 
-## Dev Scripts
-| Command        | Description                                                        |
-| -------------- | ------------------------------------------------------------------ |
-| `npm run dev`  | Wrangler Pages dev server on `http://localhost:8787` with hotloop. |
-| `npm run smoke`| Node harness that shims the DOM, runs 10 ticks, asserts decisions. |
-
-## Acceptance Quickies (m0)
-- Pause freezes tick; Step advances one frame.  
-- Two runs with the same seed produce identical first 200 ticks.  
-- Snapshot JSON, when re-applied manually, reproduces positions/needs closely.  
-- Event bus always includes `decide`/`act` payloads; target highlight animates toward the chosen cell.  
-- Keyboard shortcuts: `space`, `.`, `j`, `k` behave as documented.  
-- Injector occasionally flips behavior via a high-score “field fire drill” memory.  
+## Acceptance Quickies
+- Pause freezes tick; Step advances one frame; keyboard mirrors buttons.
+- Equal seeds → identical first 200 ticks (verified via regression harness).
+- Snapshot JSON, when reloaded manually, reproduces grid positions and needs within tolerance.
+- Event bus logs `need`, `decide`, `act`, `move`, `inject`, `quest`, `weather`, and `capture` events; target highlight animates toward the chosen cell.
+- Shared-memory prompts inflate importance and propagate across villagers.
+- Auto-capture populates `window.__CAPTURES` for later GIF stitching.
 - `npm run smoke` exits 0.
+- Quest/story inspector surfaces the current arc; chat `/inject` shows up in the log.
+
+## Season 2 API Surface
+See `season2-api.md` for proxy expectations, dev flags, and structural guarantees.
 
 ## Milestones
-See [milestones.md](milestones.md) for the current roadmap (m0 shipped, m1 “Village Behaviors” next).
+- m0 Prototype Loop ✓
+- m1 Village Behaviors ✓
+- m2 Narrative Arcs ✓ (ongoing quest authoring)
+- m3 Playable Slice (current) — onboarding overlay, dev chat, minimap, performance & docs polish.

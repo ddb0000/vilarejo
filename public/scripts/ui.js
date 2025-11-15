@@ -7,21 +7,28 @@ const CELL_COLORS = {
 };
 const CELL_SIZE = 80;
 const TARGET_COLOR = "rgba(138, 180, 255, 0.8)";
+const SPRITE_SET = ["☆", "◆", "●", "■"];
 
 export class UI {
-  constructor({ canvas, logEl, agentListEl, inspectorEl, eventsEl }) {
+  constructor({ canvas, logEl, agentListEl, inspectorEl, eventsEl, miniMap, chatLogEl, storyToggle }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.logEl = logEl;
     this.agentListEl = agentListEl;
     this.inspectorEl = inspectorEl;
     this.eventsEl = eventsEl;
+    this.miniMap = miniMap;
+    this.miniCtx = miniMap?.getContext("2d");
+    this.chatLogEl = chatLogEl;
+    this.storyToggle = storyToggle;
     this.logs = [];
     this.maxLogs = 60;
     this.agents = [];
     this.selectedIndex = 0;
+    this.storyMode = false;
     this.agentSelectHandler = null;
     this.clearInspector();
+    storyToggle?.addEventListener("click", () => this.toggleStoryMode());
   }
 
   bindAgentSelect(handler) {
@@ -34,6 +41,8 @@ export class UI {
     this.#drawWorld(world);
     this.#drawTargets(agents);
     this.#drawAgents(agents);
+    this.#drawSprites(agents);
+    this.#drawMiniMap(world, agents);
   }
 
   updateAgentList(agents, selectedIndex = this.selectedIndex) {
@@ -48,6 +57,7 @@ export class UI {
         <strong>${agent.name}</strong>
         <div class="meta">${agent.role} · last: ${agent.lastAction}</div>
         <div class="meta">routine: ${agent.routinePhase} · ${Math.ceil((agent.routineTimer || 0) / 1000)}s</div>
+        <div class="meta">mood: ${agent.mood || "steady"}</div>
       `;
       const needs = document.createElement("div");
       needs.className = "needs";
@@ -60,6 +70,13 @@ export class UI {
         needs.appendChild(row);
       });
       card.appendChild(needs);
+      const sparkline = document.createElement("div");
+      sparkline.className = "sparkline";
+      sparkline.innerHTML = (agent.metricsHistory || [])
+        .slice(0, 24)
+        .map((value) => `<span style="height:${clamp(1 - value) * 100}%"></span>`)
+        .join("");
+      card.appendChild(sparkline);
       card.addEventListener("mouseenter", () => this.showInspector(agent));
       card.addEventListener("mouseleave", () => this.showSelectedInspector());
       card.addEventListener("click", () => this.#selectAgent(index));
@@ -81,10 +98,31 @@ export class UI {
     }
   }
 
+  appendChat(author, text) {
+    if (!this.chatLogEl) return;
+    const line = document.createElement("div");
+    line.innerHTML = `<strong>${author}:</strong> ${text}`;
+    this.chatLogEl.prepend(line);
+  }
+
   showInspector(agent) {
     if (!this.inspectorEl) return;
+    this.inspectorEl.classList.toggle("story", this.storyMode);
     if (!agent) {
       this.clearInspector();
+      return;
+    }
+    if (this.storyMode) {
+      const questLine = agent.lastQuest ? `${agent.lastQuest.questId}:${agent.lastQuest.step}` : "no quest";
+      const recentEvents = (window.vilarejo?.events || []).filter((event) => event.agentId === agent.id).slice(0, 5);
+      this.inspectorEl.innerHTML = `
+        <div class="inspector-header">
+          <span>${agent.name}</span>
+          <span>${questLine}</span>
+        </div>
+        <div>Rumors: ${recentEvents.map((e) => e.data?.text || e.type).join(", ") || "none"}</div>
+        <div>${agent.memory?.entries?.filter(Boolean).slice(0, 3).map((entry) => `<div class="memory-item">${entry.observation}</div>`).join("") || '<div class="inspector-empty">No story beats.</div>'}</div>
+      `;
       return;
     }
     const decision = agent.lastDecisionDebug;
@@ -158,6 +196,11 @@ export class UI {
       .join("");
   }
 
+  toggleStoryMode() {
+    this.storyMode = !this.storyMode;
+    this.showSelectedInspector();
+  }
+
   #selectAgent(index) {
     this.selectedIndex = index;
     this.showSelectedInspector();
@@ -226,5 +269,36 @@ export class UI {
       ctx.stroke();
       ctx.restore();
     });
+  }
+
+  #drawMiniMap(world, agents) {
+    if (!this.miniCtx || !world) return;
+    const tileW = this.miniMap.width / world.width;
+    const tileH = this.miniMap.height / world.height;
+    this.miniCtx.clearRect(0, 0, this.miniMap.width, this.miniMap.height);
+    for (let y = 0; y < world.height; y += 1) {
+      for (let x = 0; x < world.width; x += 1) {
+        const cell = world.getCell(x, y);
+        this.miniCtx.fillStyle = CELL_COLORS[cell.tag] || "#222";
+        this.miniCtx.fillRect(x * tileW, y * tileH, tileW - 2, tileH - 2);
+      }
+    }
+    agents.forEach((agent, idx) => {
+      this.miniCtx.fillStyle = idx === this.selectedIndex ? "#f4a261" : "#fff";
+      this.miniCtx.fillRect(agent.pos.x * tileW + tileW / 4, agent.pos.y * tileH + tileH / 4, tileW / 2, tileH / 2);
+    });
+  }
+
+  #drawSprites(agents) {
+    if (!(typeof window !== "undefined" && window.__SPRITES)) return;
+    const { ctx } = this;
+    ctx.save();
+    ctx.font = "16px monospace";
+    ctx.fillStyle = "#fff";
+    agents.forEach((agent, index) => {
+      const glyph = SPRITE_SET[index % SPRITE_SET.length];
+      ctx.fillText(glyph, agent.pos.x * CELL_SIZE + CELL_SIZE / 2 - 6, agent.pos.y * CELL_SIZE + 18);
+    });
+    ctx.restore();
   }
 }

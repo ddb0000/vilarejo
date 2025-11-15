@@ -13,6 +13,7 @@
       body {
         margin: 0;
         padding: 1rem;
+        position: relative;
       }
       #app {
         display: flex;
@@ -27,6 +28,22 @@
         margin: 0.5rem 0;
         align-items: center;
         flex-wrap: wrap;
+      }
+      .tuning-panel {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+      }
+      .tuning-panel label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        font-size: 0.8rem;
+        color: #8ab4ff;
+      }
+      .tuning-panel input[type="range"] {
+        width: 120px;
       }
       .controls button,
       .controls input {
@@ -107,6 +124,18 @@
         overflow-y: auto;
         font-size: 0.85rem;
       }
+      .sparkline {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 32px;
+        margin-top: 0.25rem;
+      }
+      .sparkline span {
+        display: inline-block;
+        width: 4px;
+        background: linear-gradient(180deg, #8ab4ff, #1d2530);
+      }
       .log-entry {
         margin-bottom: 0.35rem;
       }
@@ -147,6 +176,21 @@
         flex-direction: column;
         gap: 0.35rem;
       }
+      .inspector.story {
+        background: #120f1c;
+      }
+      .inspector-toggle {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .inspector-toggle button {
+        background: #1d222b;
+        color: #8ab4ff;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.4rem;
+      }
       .inspector-header {
         display: flex;
         justify-content: space-between;
@@ -173,9 +217,87 @@
         color: #627597;
         font-style: italic;
       }
+      #minimap {
+        width: 120px;
+        height: 120px;
+      }
+      .chat-panel {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.5rem;
+        background: #0b0f14;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      #chat-log {
+        max-height: 140px;
+        overflow-y: auto;
+        font-size: 0.8rem;
+      }
+      #chat-form {
+        display: flex;
+        gap: 0.4rem;
+      }
+      #chat-input {
+        flex: 1;
+        background: #1d222b;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+        color: #e6edf7;
+        padding: 0.3rem;
+      }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(7, 9, 13, 0.92);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+      .overlay.open {
+        display: flex;
+      }
+      .overlay-content {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 1.5rem;
+        max-width: 520px;
+        box-shadow: 0 10px 60px rgba(0, 0, 0, 0.5);
+      }
+      .overlay-content h3 {
+        margin-top: 0;
+      }
+      .overlay-content ul {
+        padding-left: 1.2rem;
+      }
+      .overlay-content button {
+        margin-top: 1rem;
+        background: #3b82f6;
+        border: none;
+        color: white;
+        border-radius: 4px;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
+    <div id="onboarding" class="overlay open">
+      <div class="overlay-content">
+        <h3>Welcome to Vilarejo</h3>
+        <p>Quick primer:</p>
+        <ul>
+          <li>`space` pause/resume · `.` single-step</li>
+          <li>`j/k` cycle pinned agent · drag drift sliders to tune needs</li>
+          <li>Snapshots export JSON; events panel shows structured bus</li>
+          <li>Use chat panel (<code>/agent Ana</code>) to inspect or inject</li>
+        </ul>
+        <button id="overlay-dismiss">Start Exploring</button>
+      </div>
+    </div>
     <div id="app">
       <div>
         <h1>Vilarejo · Prototype Loop</h1>
@@ -185,7 +307,19 @@
           <button id="snapshot-btn" type="button">Snapshot</button>
           <input id="seed-input" type="text" placeholder="seed" aria-label="Simulation seed" />
         </div>
+        <div class="tuning-panel">
+          <label>Hunger drift <span id="hunger-label">0.010</span>
+            <input id="tune-hunger" type="range" min="0" max="0.03" step="0.001" value="0.01" />
+          </label>
+          <label>Rest drift <span id="rest-label">0.008</span>
+            <input id="tune-rest" type="range" min="0" max="0.03" step="0.001" value="0.008" />
+          </label>
+          <label>Social drift <span id="social-label">0.009</span>
+            <input id="tune-social" type="range" min="0" max="0.03" step="0.001" value="0.009" />
+          </label>
+        </div>
         <canvas id="world-canvas" width="320" height="320"></canvas>
+        <canvas id="minimap" width="160" height="160"></canvas>
       </div>
       <aside>
         <h2>Agents</h2>
@@ -193,6 +327,7 @@
         <h2>Log</h2>
         <div id="log" class="log"></div>
         <h2>Inspector</h2>
+        <div class="inspector-toggle"><button id="story-toggle" type="button">Story Mode</button></div>
         <div id="inspector" class="inspector">
           <div class="inspector-empty">Hover an agent to inspect their last plan.</div>
         </div>
@@ -201,6 +336,14 @@
           <summary>Last 20 structured events</summary>
           <div id="events" class="events-panel"></div>
         </details>
+        <h2>Dev Chat</h2>
+        <div class="chat-panel">
+          <div id="chat-log"></div>
+          <form id="chat-form">
+            <input id="chat-input" type="text" placeholder="/agent Ana" />
+            <button type="submit">Send</button>
+          </form>
+        </div>
       </aside>
     </div>
     <script type="module" src="scripts/engine.js"></script>

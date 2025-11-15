@@ -28,7 +28,11 @@ export function add(memory, observation, importance = 0.3, timestamp = Date.now(
   entries[memory.index] = entry;
   const index = (memory.index + 1) % memory.limit;
   const count = Math.min(memory.count + 1, memory.limit);
-  return { ...memory, entries, index, count };
+  let updated = { ...memory, entries, index, count };
+  if (updated.count === updated.limit) {
+    updated = compact(updated);
+  }
+  return updated;
 }
 
 export function retrieve(memory, query = "", k = 5, now = Date.now()) {
@@ -73,6 +77,28 @@ function computeRelevance(entryTokens, querySet) {
 function tokenize(text) {
   if (!text) return [];
   return (text.toLowerCase().match(TOKEN_REGEX) ?? []).filter(Boolean);
+}
+
+function compact(memory) {
+  const candidates = memory.entries
+    .map((entry, idx) => ({ entry, idx }))
+    .filter((pair) => pair.entry)
+    .sort((a, b) => (a.entry.importance || 0) - (b.entry.importance || 0))
+    .slice(0, 2);
+  if (candidates.length < 2) return memory;
+  const [first, second] = candidates;
+  const merged = {
+    id: `${first.entry.id}-merge`,
+    observation: `merged: ${first.entry.observation} | ${second.entry.observation}`,
+    importance: clamp((first.entry.importance + second.entry.importance) / 2, 0, 1),
+    timestamp: second.entry.timestamp,
+    tokens: tokenize(`${first.entry.observation} ${second.entry.observation}`)
+  };
+  const entries = memory.entries.slice();
+  entries[first.idx] = merged;
+  entries[second.idx] = null;
+  const count = Math.max(memory.count - 1, 0);
+  return { ...memory, entries, count };
 }
 
 if (typeof window !== "undefined" && window.__DEV === true) {

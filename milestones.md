@@ -1,24 +1,35 @@
-# Milestones
+# milestones.md
 
-## m0 · Prototype Loop (Nov 2025)
-Status: ✅
-- Deterministic 5 Hz engine with pause/step, seeding, snapshots, structured event bus.
-- Routine fallback (wake/work/socialize/rest) with urgent/memory deviations.
-- Inspector + RRI breakdown, target highlight, dev injector, smoke test.
-- Acceptance quickies (see README) all pass.
+## m0 · prototype loop · **done**
 
-## m1 · Village Behaviors (Next)
-Goals:
-- Distinct archetype routines + shared day scheduler (morning chores, lunch, evening wind-down).
-- Replayable seeds (persist + reload), small AI bridge stub (flagged, BYOK fetch gateway).
-- Observation scripts expanded (markets, weather) and configurable runbooks for story beats.
+deterministic core locked.
 
-## m2 · Narrative Arcs (Later)
-Goals:
-- Lightweight quest chains, shared memory prompts, automated story screenshots/GIFs.
-- CLI tooling for seeds + snapshots, regression harness for acceptance quickies.
+* 5 hz engine + pause/step + deterministic seeds
+* snapshot json + structured event bus
+* routine fallback (wake/work/socialize/rest) with urgent/memory overrides
+* rri inspector, target highlight, dev injector, smoke test
+* acceptance quickies all green
 
-## m3 · Playable Slice (Stretch)
-Goals:
-- Host on Cloudflare Pages with guided onboarding, doc GIFs, and public demo toggle.
-- Optional chat-driven inspector + prompt editing, stabilized API for future AI hookups.
+## m1 · village behaviors · **done**
+
+agents have flavor.
+
+* archetypes with chore chains + day-slot scheduler + reseed at dawn
+* observation injectors (market/weather/rumor) and drift tuning/sparklines
+* llm bridge stub (mood + summaries) gated by BYOK proxy flag
+
+## m2 · narrative arcs · **active**
+
+stories > loops.
+
+* quest graphs + triggers + quest events feeding the bus
+* shared memory prompts + rumor compression + importance inflation
+* auto capture, CLI utilities, regression harness (ongoing polish)
+
+## m3 · playable slice · **done-ish**
+
+public-facing demo surface.
+
+* onboarding overlay, minimap, chat inspector, story mode toggle
+* auto capture, CLI/regression harness, README rewrite + season2 API stub
+* spatial index + memory compaction perf pass, optional sprite layer

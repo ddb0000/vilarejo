@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const args = process.argv.slice(2);
+const ticksArg = args.find((arg) => arg.startsWith("--ticks="));
+const tickCount = ticksArg ? Number(ticksArg.split("=")[1]) : 10;
+
 const noop = () => {};
 const canvasStub = () => ({
   getContext: () => ({
@@ -32,7 +36,7 @@ const elementStub = () => ({
   prepend: noop,
   addEventListener: noop,
   setAttribute: noop,
-  getContext: () => ({ fillRect: noop }),
+  getContext: () => ({ fillRect: noop, clearRect: noop }),
   classList: { add: noop, remove: noop, toggle: noop },
   style: {}
 });
@@ -63,13 +67,13 @@ const { createMemory } = memoryModule;
 
 const world = createDefaultWorld();
 const memory = createMemory(16);
-const agent = new Agent({ id: "test", name: "Test", role: "tester", start: { x: 0, y: 0 }, memory });
+const agent = new Agent({ id: "test", name: "Test", role: "tester", start: { x: 0, y: 0 }, memory, archetype: "worker" });
 const agents = [agent];
 
-for (let i = 0; i < 10; i += 1) {
+for (let i = 0; i < tickCount; i += 1) {
   agent.tick({ world, agents, now: Date.now(), emitEvent: noop });
 }
 
 assert.ok(agent.decisionLog.length >= 1, "agent should have at least one decision recorded");
-console.log("smoke test passed: agent decisions", agent.decisionLog.length);
+console.log(`smoke test passed: agent decisions ${agent.decisionLog.length}`);
 process.exit(0);
