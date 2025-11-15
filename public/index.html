@@ -21,6 +21,25 @@
         max-width: 960px;
         margin: 0 auto;
       }
+      .controls {
+        display: flex;
+        gap: 0.5rem;
+        margin: 0.5rem 0;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .controls button,
+      .controls input {
+        background: #1d222b;
+        border: 1px solid #30363d;
+        color: #e6edf7;
+        border-radius: 4px;
+        padding: 0.3rem 0.6rem;
+        font-size: 0.85rem;
+      }
+      .controls input {
+        width: 120px;
+      }
       canvas {
         border: 1px solid #30363d;
         background: #0b0f14;
@@ -58,6 +77,10 @@
         padding: 0.5rem;
         background: #0d1117;
       }
+      .agent-card.selected {
+        border-color: #8ab4ff;
+        box-shadow: 0 0 8px rgba(138, 180, 255, 0.4);
+      }
       .needs {
         display: flex;
         flex-direction: column;
@@ -86,6 +109,32 @@
       }
       .log-entry {
         margin-bottom: 0.35rem;
+      }
+      .events-panel {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.5rem;
+        background: #0b0f14;
+        font-size: 0.8rem;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      details.events-wrapper {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.5rem;
+        background: #0d1117;
+      }
+      .event-row {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 0.25rem 0;
+      }
+      .event-row:last-child {
+        border-bottom: none;
+      }
+      .event-meta {
+        color: #8ab4ff;
+        font-size: 0.75rem;
       }
       .inspector {
         border: 1px solid #30363d;
@@ -130,6 +179,12 @@
     <div id="app">
       <div>
         <h1>Vilarejo · Prototype Loop</h1>
+        <div class="controls">
+          <button id="pause-btn" type="button">Pause</button>
+          <button id="step-btn" type="button">Step</button>
+          <button id="snapshot-btn" type="button">Snapshot</button>
+          <input id="seed-input" type="text" placeholder="seed" aria-label="Simulation seed" />
+        </div>
         <canvas id="world-canvas" width="320" height="320"></canvas>
       </div>
       <aside>
@@ -141,6 +196,11 @@
         <div id="inspector" class="inspector">
           <div class="inspector-empty">Hover an agent to inspect their last plan.</div>
         </div>
+        <h2>Events</h2>
+        <details class="events-wrapper" open>
+          <summary>Last 20 structured events</summary>
+          <div id="events" class="events-panel"></div>
+        </details>
       </aside>
     </div>
     <script type="module" src="scripts/engine.js"></script>

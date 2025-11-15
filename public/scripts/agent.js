@@ -26,6 +26,7 @@ const URGENT_THRESHOLDS = { hunger: 0.8, rest: 0.2, social: 0.4 };
 const SOCIAL_RADIUS = 1;
 const ROUTINE_BONUS = 0.1;
 const LOG_THROTTLE_MS = 2000;
+const TARGET_TTL = 2000;
 
 export class Agent {
   constructor({ id, name, start, role = "villager", memory }) {
@@ -47,6 +48,7 @@ export class Agent {
     this.routinePhase = "wake";
     this.routineTimer = ROUTINE_DURATIONS.wake;
     this.lastRoutineUpdate = 0;
+    this.activeTarget = null;
     this.wants = {
       hangout: "cafe",
       workplace: "field",
@@ -55,11 +57,16 @@ export class Agent {
   }
 
   tick(context) {
-    const { now } = context;
+    const { now, emitEvent } = context;
     this.#driftNeeds();
-    const plan = this.#plan(context);
+    this.#pruneTarget(now);
+    this.#emitEvent(emitEvent, now, "need", { needs: { ...this.needs } });
+    let plan = this.#plan(context);
+    plan = { ...plan, cause: plan.cause || "routine" };
+    this.#maybeSetTarget(plan, now);
     this.#recordDecision(plan, now);
-    const result = this.#act(plan, context);
+    this.#emitEvent(emitEvent, now, "decide", { action: plan.type, cause: plan.cause });
+    const result = this.#act(plan, { ...context, emitEvent });
     this.lastAction = plan.type;
     this.lastActionTimes[plan.type] = now;
     return result;
@@ -149,11 +156,11 @@ export class Agent {
     };
   }
 
-  #act(plan, { world, agents, now }) {
+  #act(plan, { world, agents, now, emitEvent }) {
     let logMessage = "";
     switch (plan.type) {
       case "move":
-        logMessage = this.#move(world, plan.detail);
+        logMessage = this.#move(world, plan.detail, emitEvent, now);
         break;
       case "talk":
         logMessage = this.#talk(agents, plan.detail);
@@ -170,6 +177,7 @@ export class Agent {
         break;
     }
 
+    let logSuppressed = false;
     if (logMessage) {
       const lastLog = this.lastLogActionTimes[plan.type] || 0;
       if (now - lastLog >= LOG_THROTTLE_MS) {
@@ -182,17 +190,34 @@ export class Agent {
         );
       } else {
         logMessage = "";
+        logSuppressed = true;
       }
     }
+
+    this.#emitEvent(emitEvent, now, "act", {
+      action: plan.type,
+      log: logMessage || null,
+      suppressed: logSuppressed
+    });
 
     return { action: plan.type, logMessage };
   }
 
-  #move(world, detail) {
-    const nextPos = world.stepToward(this.pos, detail.target || this.pos);
+  #move(world, detail, emitEvent, now) {
+    const target = detail?.target || this.pos;
+    const desiredTag = detail?.desiredTag || this.#desiredTag();
+    const nextPos = world.stepToward(this.pos, target);
     const before = { ...this.pos };
     this.pos = nextPos;
-    return `walks from (${before.x},${before.y}) toward ${detail.desiredTag}`;
+    this.#emitEvent(emitEvent, now, "move", {
+      from: before,
+      to: nextPos,
+      desiredTag
+    });
+    if (this.activeTarget && this.activeTarget.x === nextPos.x && this.activeTarget.y === nextPos.y) {
+      this.activeTarget = null;
+    }
+    return `walks from (${before.x},${before.y}) toward ${desiredTag}`;
   }
 
   #talk(agents, detail) {
@@ -359,6 +384,29 @@ export class Agent {
       importance: hit.components.importance,
       total: hit.score
     }));
+  }
+
+  #emitEvent(emitEvent, ts, type, data) {
+    if (typeof emitEvent !== "function") return;
+    emitEvent({ ts, agentId: this.id, type, data });
+  }
+
+  #maybeSetTarget(plan, ts) {
+    const detail = plan?.detail;
+    if (!detail?.target) return;
+    this.activeTarget = {
+      x: detail.target.x,
+      y: detail.target.y,
+      type: plan.type,
+      ts
+    };
+  }
+
+  #pruneTarget(now) {
+    if (!this.activeTarget) return;
+    if (now - this.activeTarget.ts >= TARGET_TTL) {
+      this.activeTarget = null;
+    }
   }
 
   #driftNeeds() {
